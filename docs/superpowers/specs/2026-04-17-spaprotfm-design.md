@@ -234,7 +234,7 @@
 
 | # | 假设 | 锁定值 | 防御性设计 |
 |---|---|---|---|
-| 1 | GPU | 1× RTX 4090 (24GB) 单卡 | 训练 patch 缩到 128×128；Mixed precision (fp16)；如显存仍不够，启用 latent diffusion (VAE 压缩到 1/8) |
+| 1 | GPU | **6× RTX 3090 (24GB each, 152GB total)** — 实测 2026-04-17 | 训练用 patch 256×256（无需缩小）；可启用 DDP 多卡并行；可同时跑多个 ablation；不需要 latent diffusion 兜底 |
 | 2 | PyTorch 水平 | 中级（能跑能改，不一定能从零写） | 所有模块给完整可运行模板 + 详细注释；优先用 `diffusers` / `lightning` 现成框架 |
 | 3 | 每周投入 | 20 小时 | 时间表按此节奏；buffer 已含在 Month 5 |
 | 4 | 数据 | 完全公开数据 | 已确认，无私有数据 |
