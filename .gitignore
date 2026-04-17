@@ -4,8 +4,8 @@ __pycache__/
 .pytest_cache/
 .coverage
 htmlcov/
-data/
-results/
+/data/
+/results/
 *.tiff
 *.tif
 *.zarr
