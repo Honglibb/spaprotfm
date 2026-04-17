@@ -69,14 +69,18 @@
 
 ## 4. 数据集
 
-### 4.1 训练 / 验证
+### 4.1 训练 / 验证（2026-04-17 更新：HuBMAP raw CODEX 因数据规模问题降级为 stretch）
 
-| 数据集 | 平台 | 组织 | Markers | 样本量 | 来源 | 用途 |
-|---|---|---|---|---|---|---|
-| HuBMAP 肠道 | CODEX | 大/小肠 | 46 | 16 张图 | HuBMAP Globus | 训练主力 |
-| HuBMAP 脾/淋巴 | CODEX | 脾、淋巴结 | 29 | 17 张图 | HuBMAP | 训练 |
-| Bodenmiller 黑色素瘤 | IMC | 皮肤/转移灶 | ~40 | 大队列 | `imcdatasets` R 包 | 训练 |
-| Bodenmiller 乳腺癌 (Jackson 2020) | IMC | 乳腺 | ~35 | 大队列 | `imcdatasets` R 包 | 训练 |
+| 数据集 | 平台 | 组织 | Markers | 样本量 | 大小 | 来源 | 用途 |
+|---|---|---|---|---|---|---|---|
+| **Damond 2019** | IMC | 胰腺 | 38 | 100 张 / 252k 细胞 | ~2 GB | OSN 镜像 (HTTPS) | 训练主力 |
+| **Jackson 2020** | IMC | 乳腺癌 | 42 | 100 张 / 286k 细胞 | ~2 GB | OSN 镜像 (HTTPS) | 训练 |
+| **HochSchulz 2022** | IMC | 黑色素瘤 | 41 | 50 张 / 326k 细胞 | ~1 GB | OSN 镜像 (HTTPS) | 训练 |
+| **Murphy CODEX 脾** | CODEX | 脾 | 29 | 8 张 OME-TIFF | ~42 GB | HuBMAP asset (wget) | 跨平台验证 |
+| **Murphy CODEX 淋巴结** | CODEX | 淋巴结 | 29-35 | 9 张 OME-TIFF | ~42 GB | HuBMAP asset (wget) | 跨平台验证 |
+| ~~HuBMAP raw CODEX 大/小肠~~ | ~~CODEX~~ | ~~肠道~~ | ~~46~~ | ~~16+16~~ | ~~500-750 GB/数据集~~ | ~~需 cytokit 拼接~~ | **降级为 stretch** |
+
+**论文定位升级**：从"CODEX panel 扩展"改为"**跨平台空间蛋白质组（CODEX + IMC）panel 扩展**"——主流 baseline 全是单平台，多平台是新差异化点。
 
 ### 4.2 测试（zero-shot 跨数据集）
 
