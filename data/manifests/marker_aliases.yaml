@@ -1,0 +1,98 @@
+CD3:
+  - CD3
+  - CD3e
+  - CD3epsilon
+  - CD3-epsilon
+CD4:
+  - CD4
+CD8A:
+  - CD8
+  - CD8a
+  - CD8alpha
+  - CD8α
+CD20:
+  - CD20
+CD45:
+  - CD45
+  - PTPRC
+CD45RA:
+  - CD45RA
+CD45RO:
+  - CD45RO
+CD68:
+  - CD68
+CD163:
+  - CD163
+FOXP3:
+  - FOXP3
+  - Foxp3
+KI67:
+  - Ki67
+  - MKI67
+HLA-DR:
+  - HLA-DR
+  - HLA-DRA
+  - HLADR
+PAN-CK:
+  - PanCK
+  - Pan-Keratin
+  - PanKeratin
+  - Cytokeratin
+VIMENTIN:
+  - Vimentin
+  - VIM
+DAPI:
+  - DAPI
+  - Hoechst
+ECAD:
+  - E-Cadherin
+  - ECAD
+  - CDH1
+SMA:
+  - SMA
+  - aSMA
+  - alpha-SMA
+  - ACTA2
+COLLAGEN:
+  - Collagen
+  - Col1
+  - Col1a1
+CD11C:
+  - CD11c
+  - ITGAX
+CD11B:
+  - CD11b
+  - ITGAM
+CD56:
+  - CD56
+  - NCAM1
+CD31:
+  - CD31
+  - PECAM1
+CD138:
+  - CD138
+  - SDC1
+PD1:
+  - PD-1
+  - PD1
+  - PDCD1
+PDL1:
+  - PD-L1
+  - PDL1
+  - CD274
+GRANZYMEB:
+  - GranzymeB
+  - GZMB
+CD15:
+  - CD15
+  - FUT4
+LYVE1:
+  - LYVE1
+  - LYVE-1
+PODOPLANIN:
+  - Podoplanin
+  - PDPN
+TBET:
+  - T-bet
+  - Tbet
+  - TBX21
