@@ -1,0 +1,1 @@
+"""Generative SpaProtFM models."""
