@@ -8,6 +8,7 @@ htmlcov/
 !/data/
 /data/raw/
 /data/processed/
+/data/hf_cache/
 /results/
 *.tiff
 *.tif

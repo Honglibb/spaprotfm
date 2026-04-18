@@ -24,6 +24,7 @@ dependencies = [
     "imagecodecs>=2026.3.6",
     "pyreadr>=0.5.6",
     "rpy2>=3.6.7",
+    "torchvision>=0.26.0",
 ]
 
 [project.optional-dependencies]
