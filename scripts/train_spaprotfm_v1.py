@@ -46,6 +46,14 @@ def main() -> int:
                    help="Comma-separated list of channel indices that are always observed (never masked). "
                         "E.g. Ruthenium calibration probes in JacksonFischer.")
     p.add_argument("--base", type=int, default=48, help="U-Net base channel width")
+    p.add_argument("--panel-sweep", action="store_true",
+                   help="After training, evaluate across multiple panel sizes")
+    p.add_argument("--sweep-sizes", type=str, default="3,7,10,15,20",
+                   help="Comma-separated list of panel sizes to sweep")
+    p.add_argument("--sweep-trials", type=int, default=3,
+                   help="Number of random panel configs per panel size")
+    p.add_argument("--sweep-seed", type=int, default=0,
+                   help="RNG seed for random panel selection in sweep")
     args = p.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -57,6 +65,7 @@ def main() -> int:
     non_bio_channels: list[int] = []
     if args.non_bio_channels.strip():
         non_bio_channels = [int(x.strip()) for x in args.non_bio_channels.split(",") if x.strip()]
+    args.non_bio_indices_set: set[int] = set(non_bio_channels)
 
     log.info("Loading %s ...", args.rds)
     images = load_imc_rds(str(args.rds), max_images=args.max_images or None)
@@ -326,6 +335,66 @@ def main() -> int:
     }
     (args.out_dir / "metrics.json").write_text(json.dumps(metrics, indent=2))
     (args.out_dir / "training_history.json").write_text(json.dumps(history, indent=2))
+
+    # ==================== PANEL-SIZE SWEEP ====================
+    if args.panel_sweep:
+        log.info("=== Panel-size sweep ===")
+        sweep_rng = np.random.default_rng(args.sweep_seed)
+        sizes = [int(s) for s in args.sweep_sizes.split(",")]
+        pool = [i for i in range(n_channels) if i not in args.non_bio_indices_set]
+        sweep_results = []
+        for size in sizes:
+            if size > len(pool):
+                log.warning("panel_size %d > pool %d, capping", size, len(pool))
+                size_eff = len(pool)
+            else:
+                size_eff = size
+            for trial in range(args.sweep_trials):
+                obs = sorted(sweep_rng.choice(pool, size=size_eff, replace=False).tolist())
+                preds_sw = []
+                model.eval()
+                with torch.no_grad():
+                    for i in range(0, len(x_te_t), args.batch_size):
+                        xb = x_te_t[i:i + args.batch_size].to(args.device)
+                        B = xb.shape[0]
+                        m = fixed_mask(n_channels, obs, B, device=args.device)
+                        inp = build_masked_input(xb, m)
+                        preds_sw.append(model(inp).cpu().numpy())
+                pred_sw = np.concatenate(preds_sw, axis=0)
+                pred_sw = np.moveaxis(pred_sw, 1, -1)
+                tgt_idx = [i for i in range(n_channels) if i not in obs]
+                bio_tgt_idx = [i for i in tgt_idx if i not in args.non_bio_indices_set]
+                # Flatten for pearson_correlation
+                N_sw, H_sw, W_sw, _ = pred_sw.shape
+                if tgt_idx:
+                    pred_tgt_sw = pred_sw[..., tgt_idx].reshape(N_sw * H_sw, W_sw, len(tgt_idx))
+                    y_tgt_sw = x_test[..., tgt_idx].reshape(N_sw * H_sw, W_sw, len(tgt_idx))
+                    pcc_per_marker = pearson_correlation(pred_tgt_sw, y_tgt_sw, per_channel=True)
+                else:
+                    pcc_per_marker = np.array([float("nan")])
+                if bio_tgt_idx:
+                    pred_bio_sw = pred_sw[..., bio_tgt_idx].reshape(N_sw * H_sw, W_sw, len(bio_tgt_idx))
+                    y_bio_sw = x_test[..., bio_tgt_idx].reshape(N_sw * H_sw, W_sw, len(bio_tgt_idx))
+                    pcc_bio = pearson_correlation(pred_bio_sw, y_bio_sw, per_channel=True)
+                else:
+                    pcc_bio = pcc_per_marker
+                sweep_results.append({
+                    "dataset": args.dataset_name,
+                    "panel_size": size_eff,
+                    "trial": trial,
+                    "observed_indices": [int(x) for x in obs],
+                    "observed_names": [channel_names[i] for i in obs],
+                    "n_targets": len(tgt_idx),
+                    "n_bio_targets": len(bio_tgt_idx),
+                    "mean_pcc_all": float(np.nanmean(pcc_per_marker)),
+                    "mean_pcc_bio": float(np.nanmean(pcc_bio)),
+                })
+                log.info("  size=%d trial=%d → mean_pcc_all=%.3f mean_pcc_bio=%.3f",
+                         size_eff, trial, sweep_results[-1]["mean_pcc_all"], sweep_results[-1]["mean_pcc_bio"])
+
+        (args.out_dir / "panel_sweep.json").write_text(json.dumps(sweep_results, indent=2))
+        log.info("Wrote panel_sweep.json with %d evaluation points", len(sweep_results))
+
     return 0
 
 
