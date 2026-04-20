@@ -24,31 +24,42 @@
 | HochSchulz melanoma (46 ch) | 0.493 | 0.462 | **0.4974** | +0.035 | +0.004 |
 | Jackson breast (45 ch, bio) | 0.376 | 0.338 | **0.3871** | +0.049 | +0.011 |
 
-### Updated n=3 multi-seed — both sides (2026-04-20)
+### Updated n=3 multi-seed — both sides (2026-04-20, corrected)
 
-Murphy's published mean includes DNA1/DNA2 as target channels (Murphy predicts them from the first-10 observed). v2 structurally cannot predict DNA — it is the Phikon source and forced into `always_observed`. DNA is the easiest channel to predict (PCC ~0.8–0.9), so Murphy's published mean is inflated by 2 high-PCC targets that v2 does not include. The fair comparison drops DNA from Murphy's per-marker breakdown before averaging.
+**Correction to earlier drafts.** I had previously claimed v2+Phikon "beats Murphy 9/9 paired trials" by comparing v2's `test_mean_pcc_bio_targets` against a Murphy mean recomputed with DNA channels *removed*. That was wrong. v2's reported bio-target mean **already includes DNA predictions** — the model forward produces predictions for all channels including DNA, and DNA is in the `target_idx` used by the metric (since DNA is not in `eval_obs` nor in `non_bio_channels` for Damond/HochSchulz; it is in `always_observed` but that only controls training masking, not evaluation). So the honest comparison is "both methods include DNA" or "both methods exclude DNA." Either way, v2 does **not** beat Murphy — it ties.
 
 Both v2+Phikon and Murphy were retrained at seeds {42, 0, 1}. Same `numpy.random.default_rng(seed).permutation(n_images)` for the image-level train/val/test split at each seed, so v2 and Murphy at the same seed see the **same** test images — paired comparison is valid.
 
-| Dataset | **Murphy fair (excl DNA, n=3)** | **v2+Phikon (n=3)** | Paired Δ per seed (v2 − Murphy) | **Mean paired Δ** |
+#### (A) Both including DNA (as published by both methods)
+
+| Dataset | Murphy (n=3) | v2+Phikon (n=3) | Paired Δ per seed | n paired positive |
 |---|---|---|---|---|
-| Damond | 0.391 ± 0.006 | 0.404 ± 0.014 | +0.029, +0.001, +0.010 | **+0.013** |
-| HochSchulz | 0.462 ± 0.013 | 0.482 ± 0.018 | +0.029, +0.016, +0.016 | **+0.020** |
-| Jackson | 0.391 ± 0.037 | 0.417 ± 0.026 | +0.039, +0.016, +0.024 | **+0.026** |
+| Damond | 0.421 ± 0.006 | 0.404 ± 0.014 | −0.001, −0.030, −0.022 | **0/3** |
+| HochSchulz | 0.487 ± 0.013 | 0.482 ± 0.018 | +0.005, −0.009, −0.009 | 1/3 |
+| Jackson | 0.417 ± 0.036 | 0.417 ± 0.026 | +0.012, −0.009, −0.003 | 1/3 |
 
-**9/9 paired deltas are positive.** At every (dataset × seed) cell, v2+Phikon scores higher than per-panel-retrained Murphy on the same test images. The minimum paired gain (+0.001, Damond s=0) is tiny but still positive; the maximum (+0.039, Jackson s=42) is substantial.
+Overall: **2/9 paired positive**. Jackson is a pure tie on mean. HochSchulz is a tie within noise. Damond slightly favors Murphy on average.
 
-### Breakdown by dataset
+#### (B) Both excluding DNA (DNA is a structural leak channel for v2 via Phikon pseudo-H&E)
 
-- **Damond**: v2 beats Murphy at every seed, paired mean +0.013. The s=42 gain (+0.029) is the upper tail; s=0 is essentially a tie (+0.001). Mean improvement is modest but consistent.
-- **HochSchulz**: v2 beats Murphy at every seed, paired mean +0.020. Consistent across seeds (+0.029, +0.016, +0.016). Clear win.
-- **Jackson**: v2 beats Murphy at every seed, paired mean +0.026. Both methods have high absolute variance (Murphy σ = 0.037, v2 σ = 0.026) so the dataset is generally seed-sensitive, but the *paired* differences are all positive.
+| Dataset | Murphy excl DNA (n=3) | v2 excl DNA (n=3) | Paired Δ per seed | n paired positive |
+|---|---|---|---|---|
+| Damond | 0.391 ± 0.006 | 0.380 ± 0.014 | +0.004, −0.021, −0.016 | 1/3 |
+| HochSchulz | 0.462 ± 0.013 | 0.461 ± 0.018 | +0.007, −0.006, −0.005 | 1/3 |
+| Jackson | 0.391 ± 0.037 | 0.396 ± 0.026 | +0.016, −0.003, +0.002 | 2/3 |
 
-**Primary takeaway**: A **single SpaProtFM v2 checkpoint** that supports any panel size beats **three separately-trained Murphy U-Nets** (one per dataset, each trained on the specific 10-channel eval panel) under paired-seed evaluation on bio targets.
+Overall: **4/9 paired positive**. Under the DNA-exclusion view, v2 essentially matches Murphy on HochSchulz and Jackson, and loses slightly on Damond.
 
-### Why previous drafts looked wrong
+### Honest takeaway (revised)
 
-Prior versions of this file compared v2's bio-target PCC to Murphy's DNA-inflated published PCC and concluded v2 "matches" or "falls short of" Murphy on Damond/HochSchulz. That was an apples-to-strawberries comparison — Murphy's denominator included 2 easy channels v2 cannot predict. The fair comparison (both excluding DNA) swings all 3 datasets to clear v2 wins.
+v2+Phikon **does not beat** the per-panel-trained Murphy baseline under paired multi-seed evaluation on any of the 3 IMC datasets. It matches Murphy within single-seed noise (±0.01–0.02 PCC).
+
+**The actual contribution of SpaProtFM v2 is:**
+1. **Single-checkpoint panel flexibility** — the *same* model weights handle any panel size (3/7/10/15/20 channels observed), whereas Murphy requires retraining for each panel configuration. This is the primary paper story; Murphy parity is the acceptance criterion.
+2. **Panel-sweep gains at larger panel sizes** on some datasets (see earlier sweep table); v2 can leverage extra observed channels at inference without retraining.
+3. **Pseudo-H&E + Phikon-v2 condition** contributes a small, consistent positive delta (+0.012 to +0.024 PCC vs v2-no-cond, 9/9 paired positive for *this* ablation specifically). This is the honest Phikon contribution — a modest auxiliary signal, not the headline driver.
+
+Earlier drafts that framed this as "v2 beats Murphy on all 3 datasets" are incorrect and have been retracted.
 
 ## Panel sweep (mean PCC over 3 random panel draws)
 
@@ -108,27 +119,20 @@ For the paper, the **headline fixed-panel eval** is the apples-to-apples compari
 | HochSchulz | +0.007 | +0.016 | +0.012 | **+0.012 ± 0.005** |
 | Jackson | +0.020 | +0.011 | +0.016 | **+0.016 ± 0.004** |
 
-### vs. Murphy baseline (fair, multi-seed, both excluding DNA from targets)
+### vs. Murphy baseline (n=3, paired) — see the main headline section for the full table
 
-| Dataset | Murphy fair (n=3) | v2+Phikon (n=3) | Paired Δ per seed | **Mean paired Δ** |
-|---|---|---|---|---|
-| Damond | 0.391 ± 0.006 | 0.404 ± 0.014 | +0.029 (s42), +0.001 (s0), +0.010 (s1) | **+0.013** |
-| HochSchulz | 0.462 ± 0.013 | 0.482 ± 0.018 | +0.029, +0.016, +0.016 | **+0.020** |
-| Jackson | 0.391 ± 0.037 | 0.417 ± 0.026 | +0.039, +0.016, +0.024 | **+0.026** |
+The full comparison is in the top-of-file Headline section. Summary: under either "both incl DNA" (published) or "both excl DNA" views, v2+Phikon does **not** beat Murphy — it ties within single-seed noise. 2/9 paired positive under (A), 4/9 under (B).
 
-Paired: v2 and Murphy at the same seed see the same test images (same `numpy.random.default_rng(seed).permutation` → same image-level split). 9/9 per-seed cells show v2 > Murphy; the minimum paired gain is +0.001 (Damond s=0) and the maximum is +0.039 (Jackson s=42).
+### Phikon ablation read-out (this is a valid internal comparison)
 
-### Honest read-out
-
-- **Phikon contributes a small but consistent positive delta on every dataset**: +0.024 (Damond), +0.012 (HochSchulz), +0.016 (Jackson). The delta is positive at every single seed / dataset / condition pair (9/9). So Phikon signal is *real*, not seed noise, but the magnitude is modest.
-- **The seed=42 single-seed Damond +0.044 is the upper tail of the distribution**, not typical. The seed=0 and seed=1 deltas (+0.013, +0.016) are more representative. The original notes framing "Damond is Phikon-critical" overclaimed — under noise-floor conditions Phikon adds ~0.01-0.02 PCC there, same as the other datasets.
-- **Seed variance is dataset-dependent on both methods**. Murphy std (excl DNA): Damond ±0.006, HochSchulz ±0.013, Jackson ±0.037. v2+Phikon std: ±0.014, ±0.018, ±0.026. Jackson is intrinsically seed-sensitive for both.
-- **v2 beats Murphy on all 3 datasets with paired seeds (9/9 positive deltas)**. A single SpaProtFM v2 checkpoint beats three separately-trained Murphy U-Nets on their own panel, on the same bio-target set. Paper framing: "matches-or-beats per-panel-retrained baseline while providing one-checkpoint panel flexibility."
+- **Phikon contributes a small but consistent positive delta on every dataset**: +0.024 (Damond), +0.012 (HochSchulz), +0.016 (Jackson). The delta is positive at all 9/9 (dataset × seed) cells, so the Phikon signal is *real*, not seed noise — but the magnitude is modest.
+- **The seed=42 single-seed Damond +0.044 is the upper tail of the distribution**, not typical. The seed=0 and seed=1 deltas (+0.013, +0.016) are more representative. Earlier framing of "Damond is Phikon-critical" overclaimed; under noise-floor conditions Phikon adds ~0.01–0.02 PCC there, same as the other datasets.
+- **Seed variance is dataset-dependent on both methods**. Murphy std: Damond ±0.006, HochSchulz ±0.013, Jackson ±0.036. v2+Phikon std: ±0.014, ±0.018, ±0.026. Jackson is intrinsically seed-sensitive for both methods.
 
 ### Caveats / follow-ups
 
-- n=3 is still small; 5-10 seeds would enable publishable p-values. The 9/9 positive paired count is already very strong evidence under a sign test (p ≈ 0.002 if we treat cells as independent — in reality they aren't, but the signal is unambiguous).
-- The Damond s=0 paired gain is only +0.001, so Murphy and v2 are effectively tied on that seed. Worth watching if the tail thickens under more seeds.
+- n=3 is small; 5–10 seeds would enable publishable p-values. The 9/9 positive Phikon-ablation count is strong under a sign test, but the v2-vs-Murphy paired diffs are noisy enough that sign counts are not useful — absolute magnitudes matter.
+- Paper framing should center on **single-checkpoint panel flexibility** rather than a headline accuracy win over Murphy. The accuracy is parity, not advantage.
 - Murphy was retrained at the same seeds used for v2 ablation (42, 0, 1). Each seed's `rng.permutation(n_images)` produces the same train/val/test image split across methods, so paired comparisons are valid.
 
 **Raw runs**:
