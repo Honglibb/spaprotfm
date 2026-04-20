@@ -87,6 +87,11 @@ def main() -> int:
     p.add_argument("--sweep-trials", type=int, default=3)
     p.add_argument("--sweep-seed", type=int, default=0)
     p.add_argument("--phikon-model", default="owkin/phikon-v2")
+    p.add_argument("--no-cond", action="store_true",
+                   help="Ablation: train MaskedUNetV2 with cond=None (no Phikon). "
+                        "Isolates the Phikon contribution from the architecture change.")
+    p.add_argument("--save-checkpoint", action="store_true",
+                   help="Save best model state_dict to out_dir/model.pt.")
     args = p.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -143,12 +148,19 @@ def main() -> int:
     train_dl = torch.utils.data.DataLoader(train_ds, batch_size=args.batch_size,
                                            shuffle=True, num_workers=0, pin_memory=True)
 
-    log.info("Loading Phikon-v2 (frozen) ...")
-    phikon = PhikonEncoder(model_id=args.phikon_model).to(args.device)
-    # Use fp32 to keep simple; Phikon is small relative to our U-Net.
-    phikon_dtype = next(phikon.model.parameters()).dtype
-    cond_in = phikon.hidden_dim
-    cond_grid = phikon.grid_size
+    if args.no_cond:
+        log.info("Ablation mode: --no-cond set, skipping Phikon load.")
+        phikon = None
+        phikon_dtype = None
+        cond_in = 1024  # kept for arch parity with v2; unused when cond=None
+        cond_grid = 14
+    else:
+        log.info("Loading Phikon-v2 (frozen) ...")
+        phikon = PhikonEncoder(model_id=args.phikon_model).to(args.device)
+        # Use fp32 to keep simple; Phikon is small relative to our U-Net.
+        phikon_dtype = next(phikon.model.parameters()).dtype
+        cond_in = phikon.hidden_dim
+        cond_grid = phikon.grid_size
 
     model = MaskedUNetV2(
         n_channels=n_channels, base=args.base,
@@ -176,9 +188,11 @@ def main() -> int:
     best_state = None
     t0 = time.time()
 
-    def encode_cond(full: torch.Tensor) -> torch.Tensor:
+    def encode_cond(full: torch.Tensor) -> torch.Tensor | None:
+        if phikon is None:
+            return None
         return encode_phikon_batch(full, dna_channels, bio_idx_for_he,
-                                    phikon, args.device, phikon_dtype)
+                                    phikon, args.device, phikon_dtype).float()
 
     # ==================== STAGE 1 ====================
     log.info("=== Stage 1: random-mask pre-training (%d epochs) ===", args.epochs)
@@ -188,7 +202,7 @@ def main() -> int:
         for (xb,) in train_dl:
             xb = xb.to(args.device, non_blocking=True)
             B = xb.shape[0]
-            cond = encode_cond(xb).float()
+            cond = encode_cond(xb)
             mask = random_mask_with_always_observed(
                 n_channels=n_channels, batch_size=B,
                 always_observed=always_observed if always_observed else None,
@@ -214,7 +228,7 @@ def main() -> int:
             with torch.no_grad():
                 xv = x_va_t.to(args.device)
                 B = xv.shape[0]
-                cond_v = encode_cond(xv).float()
+                cond_v = encode_cond(xv)
                 mv = random_mask_with_always_observed(
                     n_channels=n_channels, batch_size=B,
                     always_observed=always_observed if always_observed else None,
@@ -252,7 +266,7 @@ def main() -> int:
         for (xb,) in train_dl:
             xb = xb.to(args.device, non_blocking=True)
             B = xb.shape[0]
-            cond = encode_cond(xb).float()
+            cond = encode_cond(xb)
             mask = fixed_mask(n_channels, eval_obs, B, device=args.device)
             inp = build_masked_input(xb, mask)
             pred = model(inp, cond)
@@ -272,7 +286,7 @@ def main() -> int:
             with torch.no_grad():
                 xv = x_va_t.to(args.device)
                 B = xv.shape[0]
-                cond_v = encode_cond(xv).float()
+                cond_v = encode_cond(xv)
                 mvf = fixed_mask(n_channels, eval_obs, B, device=args.device)
                 invf = build_masked_input(xv, mvf)
                 pvf = model(invf, cond_v)
@@ -289,6 +303,10 @@ def main() -> int:
 
     if best_state is not None:
         model.load_state_dict(best_state)
+        if args.save_checkpoint:
+            ckpt_path = args.out_dir / "model.pt"
+            torch.save(best_state, ckpt_path)
+            log.info("Saved best checkpoint → %s", ckpt_path)
 
     # ==================== TEST ====================
     model.eval()
@@ -297,7 +315,7 @@ def main() -> int:
         for i in range(0, len(x_te_t), args.batch_size):
             xb = x_te_t[i:i + args.batch_size].to(args.device)
             B = xb.shape[0]
-            cond_b = encode_cond(xb).float()
+            cond_b = encode_cond(xb)
             m = fixed_mask(n_channels, eval_obs, B, device=args.device)
             inp = build_masked_input(xb, m)
             preds.append(model(inp, cond_b).cpu().numpy())
@@ -337,7 +355,8 @@ def main() -> int:
                 for i, pv in enumerate(pcc_per_marker)}
 
     metrics = {
-        "model": "spaprotfm_v2_masked_unet_phikon",
+        "model": "spaprotfm_v2_masked_unet_phikon" if not args.no_cond else "spaprotfm_v2_no_cond_ablation",
+        "use_cond": not args.no_cond,
         "dataset": args.dataset_name,
         "rds_path": str(args.rds),
         "n_images": n_images,
@@ -409,7 +428,7 @@ def main() -> int:
                     for i in range(0, len(x_te_t), args.batch_size):
                         xb = x_te_t[i:i + args.batch_size].to(args.device)
                         B = xb.shape[0]
-                        cond_b = encode_cond(xb).float()
+                        cond_b = encode_cond(xb)
                         m = fixed_mask(n_channels, obs, B, device=args.device)
                         inp = build_masked_input(xb, m)
                         preds_sw.append(model(inp, cond_b).cpu().numpy())
