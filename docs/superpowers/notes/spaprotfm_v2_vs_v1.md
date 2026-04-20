@@ -16,13 +16,23 @@
 
 ## Headline (size-10 fixed panel, bio targets)
 
-| Dataset | Murphy baseline | SpaProtFM v1 | **SpaProtFM v2** | Δ(v2 − v1) | Δ(v2 − Murphy) |
-|---|---|---|---|---|---|
-| Damond pancreas (38 ch) | 0.421 | 0.397 | **0.4198** | +0.023 | **−0.001** (tied) |
-| HochSchulz melanoma (46 ch) | 0.493 | 0.462 | **0.4974** | +0.035 | **+0.004** |
-| Jackson breast (45 ch, bio) | 0.376 | 0.338 | **0.3871** | +0.049 | **+0.011** |
+### Original single-seed (s=42) report
 
-**Takeaway**: v2 closes the entire remaining gap vs the per-panel Murphy baseline on all three datasets, and beats it on HochSchulz and Jackson. With a *single* checkpoint supporting any panel, v2 now matches/exceeds three separately-trained per-dataset baselines.
+| Dataset | Murphy baseline | SpaProtFM v1 | **SpaProtFM v2 s=42** | Δ(v2 − v1) | Δ(v2 − Murphy) |
+|---|---|---|---|---|---|
+| Damond pancreas (38 ch) | 0.421 | 0.397 | **0.4198** | +0.023 | −0.001 (tied) |
+| HochSchulz melanoma (46 ch) | 0.493 | 0.462 | **0.4974** | +0.035 | +0.004 |
+| Jackson breast (45 ch, bio) | 0.376 | 0.338 | **0.3871** | +0.049 | +0.011 |
+
+### Updated n=3 multi-seed (2026-04-20 follow-up)
+
+| Dataset | Murphy | **v2+Phikon (mean ± std, n=3)** | Best seed | Δ(v2 mean − Murphy) |
+|---|---|---|---|---|
+| Damond | 0.421 | **0.404 ± 0.014** | 0.420 (s=42) | −0.017 |
+| HochSchulz | 0.493 | **0.482 ± 0.018** | 0.497 (s=42) | −0.011 |
+| Jackson | 0.376 | **0.417 ± 0.026** | 0.437 (s=1) | **+0.041** |
+
+**Takeaway (corrected)**: The original s=42 table reported lucky seeds on Damond and HochSchulz. Under n=3 multi-seed evaluation, v2+Phikon **matches** Murphy on Damond and HochSchulz (within single-seed variance; Murphy is itself single-seed) and **clearly exceeds** Murphy on Jackson by +0.041 PCC. The headline story is still valid — a single checkpoint spanning any panel size matches per-panel-retrained baselines — but "beats on all 3" is replaced with "matches on 2, beats on 1" for honesty. See the ablation section below for full per-seed numbers and Phikon attribution.
 
 ## Panel sweep (mean PCC over 3 random panel draws)
 
@@ -57,35 +67,59 @@ For the paper, the **headline fixed-panel eval** is the apples-to-apples compari
 - Pseudo-H&E is synthesized on CPU per-batch, encoded on GPU under `torch.no_grad`. Cost: ~25% wall-clock increase over v1 (Damond ~33 min, HochSchulz ~55 min, Jackson ~67 min on a single 3090).
 - `--panel-sweep` honors `always_observed`: `extra_needed = size - len(always_observed)`. Sizes smaller than `always_observed` are skipped with a warning.
 
-## Phikon ablation (2026-04-20 follow-up)
+## Phikon ablation (2026-04-20, updated with n=3 multi-seed)
 
-**Question**: how much of v2's gain comes from the Phikon signal, and how much from the architectural change (added `cond_proj` / `cond_fuse` layers + retrained on same recipe)?
+**Question**: how much of v2's gain comes from the Phikon signal, and how much from seed / split variance?
 
-**Setup**: re-train MaskedUNetV2 with `cond=None` at every forward pass. Same code path (`_fuse_condition` bypasses when cond is None), same optimizer, same data, same 30+5 two-stage schedule. `cond_proj`/`cond_fuse` parameters exist but never receive gradient, so they stay at init. Single seed (42), headline size-10 fixed-panel eval, bio targets.
+**Setup**: re-train MaskedUNetV2 with `cond=None` vs. `cond=Phikon(pseudo-H&E)` at each of 3 seeds (42, 0, 1). Each seed independently permutes the image-level train/val/test split and model initialization. Same architecture, same optimizer, same 30+5 two-stage schedule. Headline size-10 fixed-panel eval, bio targets, paired comparison at each seed.
 
-| Dataset | v1 | **v2 no-cond** | **v2 + Phikon** | Murphy | Phikon Δ | Arch-alone Δ (v2nc − v1)† |
-|---|---|---|---|---|---|---|
-| Damond pancreas | 0.397 | 0.376 | **0.420** | 0.421 | **+0.044** | −0.021 |
-| HochSchulz melanoma | 0.462 | 0.491 | **0.497** | 0.493 | +0.006 | +0.029 |
-| Jackson breast | 0.338 | 0.367 | **0.387** | 0.376 | +0.020 | +0.029 |
+### Per-seed results (test mean PCC bio targets)
 
-† The "arch-alone" delta is not a real architectural contribution — v2-no-cond has identical compute graph to v1 (bypass branch, dead cond layers). The observed spread (−0.021 to +0.029) is single-seed random-state noise from `torch.manual_seed(42)` consuming more RNG draws during model init on v2 (diverging mask / data-shuffle streams). Treat it as the empirical ~±0.03 single-seed noise floor on these datasets.
+| Dataset | Cond | s=42 | s=0 | s=1 | **mean ± std** |
+|---|---|---|---|---|---|
+| Damond | no-cond | 0.376 | 0.385 | 0.377 | 0.379 ± 0.005 |
+| Damond | **+Phikon** | 0.420 | 0.398 | 0.394 | **0.404 ± 0.014** |
+| HochSchulz | no-cond | 0.491 | 0.446 | 0.475 | 0.471 ± 0.023 |
+| HochSchulz | **+Phikon** | 0.497 | 0.463 | 0.487 | **0.482 ± 0.018** |
+| Jackson | no-cond | 0.367 | 0.415 | 0.421 | 0.401 ± 0.029 |
+| Jackson | **+Phikon** | 0.387 | 0.427 | 0.437 | **0.417 ± 0.026** |
 
-**Read-out**:
+### Phikon delta (paired, per-seed)
 
-- **Phikon contributes variably**, from +0.006 (HochSchulz) to +0.044 (Damond). Mean +0.023 across the three datasets.
-- **Damond is Phikon-critical.** Without Phikon, v2 drops to 0.376 — *below* the Murphy baseline. Only the full Phikon condition closes the gap. This is consistent with pancreas IMC being structurally hardest: many fine-grained endocrine markers (INS, GCG, SST, PPY, PIN, PDX1, NKX6_1) that a DNA anchor alone cannot disambiguate.
-- **HochSchulz barely needs Phikon** at this panel size. The 46-channel panel includes enough correlated tissue markers (VIM, SMA, S100, H3K27me3) that the bottleneck already has strong context without the pathology-FM features.
-- **Jackson sits in between.** Both contribute roughly equally — ~half the headline win over v1 comes from the Phikon signal.
+| Dataset | s=42 | s=0 | s=1 | **mean Δ ± std** |
+|---|---|---|---|---|
+| Damond | +0.044 | +0.013 | +0.016 | **+0.024 ± 0.017** |
+| HochSchulz | +0.007 | +0.016 | +0.012 | **+0.012 ± 0.005** |
+| Jackson | +0.020 | +0.011 | +0.016 | **+0.016 ± 0.004** |
 
-**Paper framing**: Phikon is necessary on Damond and helpful on Jackson; on HochSchulz the architecture change and (same-recipe) retrain already suffice. The pseudo-H&E+Phikon module is dataset-adaptive — the model learns to use it when the target channels demand context that DNA alone cannot provide. This is a more honest and defensible story than "Phikon uniformly adds X PCC."
+### vs. Murphy baseline (single-seed per-panel-trained)
 
-**Follow-ups worth considering**:
-- Multi-seed (n≥3) single-dataset runs on Damond to rule out seed noise amplifying the Phikon delta.
-- Attention / saliency over `cond_fuse` output to visualize *which* channels pull most signal from Phikon.
-- Replace pseudo-H&E with constant zeros at *inference* for trained Phikon model (separates training-time learning vs. inference-time dependence).
+| Dataset | Murphy | v2+Phikon mean | v2+Phikon best seed | mean − Murphy |
+|---|---|---|---|---|
+| Damond | 0.421 | 0.404 | 0.420 (s=42) | −0.017 |
+| HochSchulz | 0.493 | 0.482 | 0.497 (s=42) | −0.011 |
+| Jackson | 0.376 | **0.417** | 0.437 (s=1) | **+0.041** |
 
-**Raw runs**: `results/v2_nocond_{damond,hochschulz,jackson}/metrics.json`, checkpoints at `.../model.pt`.
+### Honest read-out
+
+- **Phikon contributes a small but consistent positive delta on every dataset**: +0.024 (Damond), +0.012 (HochSchulz), +0.016 (Jackson). The delta is positive at every single seed / dataset / condition pair (9/9). So Phikon signal is *real*, not seed noise, but the magnitude is modest.
+- **The seed=42 single-seed Damond +0.044 is the upper tail of the distribution**, not typical. The seed=0 and seed=1 deltas (+0.013, +0.016) are more representative. The original notes framing "Damond is Phikon-critical" overclaimed — under noise-floor conditions Phikon adds ~0.01-0.02 PCC there, same as the other datasets.
+- **Seed variance on v2-no-cond is dataset-dependent**: tiny on Damond (±0.005), large on HochSchulz (±0.023) and Jackson (±0.029). Jackson's ±0.029 std is bigger than any Phikon delta measured, which is why single-seed Murphy comparisons on Jackson are unreliable.
+- **Murphy comparison** (single-seed Murphy vs n=3 v2 mean):
+  - Jackson: v2+Phikon mean (0.417) clearly **beats** Murphy (0.376) by +0.041.
+  - Damond / HochSchulz: v2+Phikon mean falls within noise distance of Murphy (−0.017 and −0.011). Given Murphy is itself single-seed, we cannot claim v2 beats it here; we can claim "matches within single-seed error bars."
+- **Revised paper framing**: SpaProtFM v2 is a one-checkpoint-any-panel model that **matches the per-panel-trained Murphy baseline on pancreas and melanoma** (within seed variance) **and clearly exceeds it on breast cancer** (+0.041 PCC, n=3). Phikon adds a consistent ~+0.012 to +0.024 PCC across datasets. The single-model flexibility is the primary contribution; Phikon is a modest but uniform auxiliary gain.
+
+### Caveats / follow-ups
+
+- Murphy baseline is single-seed; if we re-trained Murphy at 3 seeds its variance would likely overlap ours further, making "matches Murphy" the appropriate claim on all 3 datasets rather than "beats."
+- Paired t-test on per-seed Phikon deltas (n=3) is underpowered; a larger n (5-10 seeds) would give publishable p-values. Currently 9/9 positive per-seed deltas is the cleanest signal.
+- Consider comparing against a **stronger baseline** (e.g., Murphy retrained with multi-seed) to strengthen the Jackson win claim.
+
+**Raw runs**:
+- Damond: `results/v2_{nocond,phikon}_damond{,_s0,_s1}/metrics.json` (legacy original run is `v2_sweep_damond/` for s=42 +Phikon)
+- HochSchulz / Jackson: analogous paths with `hochschulz` / `jackson`
+- All runs save `model.pt` checkpoint at stage-2 best val.
 
 ## Data / artifacts
 
