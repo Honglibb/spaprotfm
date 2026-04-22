@@ -177,6 +177,7 @@ class IMCImage:
     name: str
     image: np.ndarray  # (H, W, C) float32
     channel_names: list[str]
+    dataset: str | None = None  # source-dataset tag (set by multi-dataset loader)
 
 
 def load_imc_rds(
@@ -260,3 +261,98 @@ def load_imc_rds(
 
     logger.info("Loaded %d images from %s", len(images), path.name)
     return images
+
+
+# --------------------------------------------------------------------------
+# Multi-dataset loader with shared-panel projection
+# --------------------------------------------------------------------------
+
+# Default canonical markers for cross-dataset transfer — the 10 markers shared
+# across Damond / HochSchulz / Jackson after alias harmonization.
+DEFAULT_CANONICAL_MARKERS: list[str] = [
+    "DNA1", "DNA2", "H3", "SMA",                   # always observed
+    "CD20", "CD3e", "CD45", "CD68", "Ki67", "cPARP",  # targets
+]
+
+# Aliases: canonical → {dataset: native name in that dataset's channel list}.
+# Datasets not listed use the canonical name unchanged.
+DEFAULT_MARKER_ALIASES: dict[str, dict[str, str]] = {
+    "Ki67":  {"HochSchulz": "Ki67_Er168"},
+    "cPARP": {"Damond": "cPARP_cCASP3", "HochSchulz": "c_PARP", "Jackson": "cPARP_cCASP3"},
+    # CTNNB, p_H3 not in the default 10-marker set but kept here for reference.
+}
+
+
+def _resolve_native_name(canonical: str, dataset: str,
+                          aliases: dict[str, dict[str, str]]) -> str:
+    if canonical in aliases and dataset in aliases[canonical]:
+        return aliases[canonical][dataset]
+    return canonical
+
+
+def project_to_canonical_panel(
+    imgs: list[IMCImage],
+    dataset: str,
+    canonical_markers: list[str] = DEFAULT_CANONICAL_MARKERS,
+    aliases: dict[str, dict[str, str]] = DEFAULT_MARKER_ALIASES,
+) -> list[IMCImage]:
+    """Project each image's channel axis onto the canonical shared panel.
+
+    For each image, select only channels corresponding to ``canonical_markers``
+    (resolving aliases per dataset) and reorder them into canonical order. The
+    returned IMCImage objects have ``channel_names == canonical_markers`` and
+    ``dataset`` set to the source tag.
+    """
+    if not imgs:
+        return []
+    native_names = imgs[0].channel_names
+    idx_map: list[int] = []
+    for canon in canonical_markers:
+        native = _resolve_native_name(canon, dataset, aliases)
+        if native not in native_names:
+            raise KeyError(
+                f"Marker '{canon}' (native '{native}') not found in {dataset} "
+                f"channels: {native_names}"
+            )
+        idx_map.append(native_names.index(native))
+
+    out: list[IMCImage] = []
+    for im in imgs:
+        proj = im.image[..., idx_map].copy()
+        out.append(IMCImage(
+            name=f"{dataset}:{im.name}",
+            image=proj,
+            channel_names=list(canonical_markers),
+            dataset=dataset,
+        ))
+    return out
+
+
+def load_imc_shared_panel(
+    datasets: list[tuple[str, str]],
+    canonical_markers: list[str] = DEFAULT_CANONICAL_MARKERS,
+    aliases: dict[str, dict[str, str]] = DEFAULT_MARKER_ALIASES,
+    *,
+    max_images: int | None = None,
+) -> list[IMCImage]:
+    """Load several IMC RDS files and project each onto a shared canonical panel.
+
+    Args:
+        datasets: list of (dataset_name, rds_path) pairs.
+        canonical_markers: ordered list of shared marker names.
+        aliases: per-dataset alias map (see DEFAULT_MARKER_ALIASES).
+        max_images: if set, limits each dataset to this many images.
+
+    Returns:
+        Flat list of IMCImage, each tagged with its source dataset.
+    """
+    all_imgs: list[IMCImage] = []
+    for dataset, rds_path in datasets:
+        raw = load_imc_rds(rds_path, max_images=max_images)
+        proj = project_to_canonical_panel(raw, dataset, canonical_markers, aliases)
+        logger.info("Projected %s: %d images → %d canonical channels",
+                    dataset, len(proj), len(canonical_markers))
+        all_imgs.extend(proj)
+    logger.info("Total pooled images: %d across %d datasets",
+                len(all_imgs), len(datasets))
+    return all_imgs
