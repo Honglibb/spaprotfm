@@ -139,11 +139,12 @@ def fig_he_ablation() -> None:
     fig.legend(handles, labels, loc="upper center", ncol=3,
                bbox_to_anchor=(0.5, 1.02), handlelength=1.8,
                columnspacing=2.0, borderpad=0.3)
-    # Per-panel baseline value as small annotation next to the dashed line
+    # Per-panel baseline value annotated at the left end (whitespace above
+    # the starting data points) so it does not sit on top of the dashed line.
     for ax, (_, _, _, base_pcc) in zip(axes, HE_CONFIG):
-        ax.annotate(f"{base_pcc:.2f}", xy=(ax.get_xlim()[1], base_pcc),
-                    xytext=(-4, 3), textcoords="offset points",
-                    fontsize=6.5, color=C_GREY, ha="right", va="bottom")
+        ax.annotate(f"{base_pcc:.2f}", xy=(ax.get_xlim()[0], base_pcc),
+                    xytext=(4, 4), textcoords="offset points",
+                    fontsize=7, color=C_GREY, ha="left", va="bottom")
     fig.tight_layout(w_pad=1.2, rect=(0, 0, 1, 0.93))
     save(fig, "figure_he_ablation")
 
