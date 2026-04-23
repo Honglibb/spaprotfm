@@ -29,7 +29,10 @@ import numpy as np
 import torch
 
 from spaprotfm.condition.phikon import PhikonEncoder
-from spaprotfm.condition.pseudo_he import synthesize_pseudo_he_batch
+from spaprotfm.condition.pseudo_he import (
+    synthesize_pseudo_he,
+    synthesize_pseudo_he_batch,
+)
 from spaprotfm.data.bodenmiller import (
     DEFAULT_CANONICAL_MARKERS,
     load_imc_rds,
@@ -162,12 +165,14 @@ def pick_tile(imgs, model, phikon, rng: np.random.Generator) -> tuple[np.ndarray
     return top[mid][0], preds[mid]
 
 
-def composite_morphology(tile: np.ndarray) -> np.ndarray:
-    """RGB composite: R=SMA, G=H3, B=DNA1. Each channel robust-scaled."""
-    r = robust_scale(tile[..., CANON.index("SMA")])
-    g = robust_scale(tile[..., CANON.index("H3")])
-    b = robust_scale(tile[..., CANON.index("DNA1")])
-    return np.stack([r, g, b], axis=-1)
+def pseudo_he_rgb(tile: np.ndarray) -> np.ndarray:
+    """Run the same pseudo-H&E synthesis that feeds the Phikon conditioner.
+
+    Returns (H, W, 3) uint-safe float32 in [0, 1].
+    """
+    # tile is (H, W, C); synthesize_pseudo_he accepts (C, H, W) or (H, W, C).
+    rgb = synthesize_pseudo_he(tile, DNA_IDX, BIO_IDX_FOR_HE)
+    return rgb.permute(1, 2, 0).cpu().numpy()
 
 
 def main() -> None:
@@ -199,7 +204,7 @@ def main() -> None:
         gridspec_kw={"width_ratios": [1] * (ncols - 1) + [1.15]},
     )
 
-    col_headers = ["morphology\n(SMA/H3/DNA1)"]
+    col_headers = ["pseudo-H&E\n(Phikon input)"]
     for mk in DISPLAY_MARKERS:
         col_headers += [f"{mk}\nground truth", f"{mk}\nv2 prediction"]
     col_headers += ["per-pixel density\n(6 targets pooled)"]
@@ -207,8 +212,8 @@ def main() -> None:
     for row, ds in enumerate(("Damond", "HochSchulz", "Jackson")):
         gt, pred = per_ds[ds]
         col = 0
-        # Morphology composite
-        axes[row, col].imshow(composite_morphology(gt))
+        # Pseudo-H&E (same synthesis that feeds Phikon-v2 conditioning)
+        axes[row, col].imshow(pseudo_he_rgb(gt))
         # Row label as axis ylabel — will be visible once spines are off but
         # axes remain allocated.
         axes[row, col].set_ylabel(
