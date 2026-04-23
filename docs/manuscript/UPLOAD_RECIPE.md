@@ -18,7 +18,7 @@ as `<REPO>`). Do **not** initialise it with README / license / gitignore
 
 ```bash
 # Add the GitHub remote and push main
-git remote add origin https://github.com/<USERNAME>/<REPO>.git
+git remote add origin https://github.com/Honglibb/spaprotfm.git
 git branch -M main
 git push -u origin main
 ```
@@ -29,7 +29,7 @@ time. If you need one, generate at
 
 After push, your repo URL is:
 ```
-https://github.com/<USERNAME>/<REPO>
+https://github.com/Honglibb/spaprotfm
 ```
 
 Tell me this URL and I'll substitute it into the manuscript's
@@ -66,7 +66,7 @@ The zip is 70 MB and contains four checkpoint directories plus
 | Description | (copy in the first paragraph of `DATA_README.md` from inside the zip) |
 | License | CC-BY-4.0 |
 | Keywords | imaging mass cytometry, spatial proteomics, panel extension, foundation model, Phikon-v2, pathology |
-| Related identifiers | `https://github.com/<USERNAME>/<REPO>` → relation: "is supplemented by" |
+| Related identifiers | `https://github.com/Honglibb/spaprotfm` → relation: "is supplemented by" |
 | Version | v1.0 |
 
 Drag and drop the `spaprotfm_v2_checkpoints.zip` → click **Publish**.
@@ -81,7 +81,7 @@ this DOI and I'll substitute it into the manuscript.
 If you want Phikon-style "model card" discoverability — so other
 researchers searching Hugging Face for "IMC panel extension" can find
 your checkpoints — repeat the upload at `https://huggingface.co/new`
-under a repo like `<USERNAME>/spaprotfm-v2`. Not required for BIB
+under a repo like `Honglibb/spaprotfm-v2`. Not required for BIB
 submission; the Zenodo DOI is sufficient and more formal.
 
 ---
