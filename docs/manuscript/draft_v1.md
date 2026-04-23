@@ -1,8 +1,10 @@
 # SpaProtFM: pseudo-H&E-conditioned masked panel extension for cross-cohort imaging mass cytometry
 
-**Authors**: [Author list TBD]
-**Affiliations**: [TBD]
-**Correspondence**: [TBD]
+**Author**: Hongli Yin¹,*
+
+¹ Institute of Pediatric Research, Children's Hospital of Soochow University, Suzhou, China
+
+\* Corresponding author: hongli.yin@tum.de
 **Target venue**: Briefings in Bioinformatics (method article)
 **Draft**: v1, 2026-04-23
 
@@ -83,11 +85,11 @@ investigator commits to a single antibody panel at study design, and
 these panels differ substantially between studies. The three most-
 cited public IMC cohorts in the Bodenmiller ecosystem are a concrete
 example: Damond *et al.* profiled 38 markers in type-1 diabetes
-pancreatic sections [ref: Damond 2019]; Hoch and Schulz *et al.*
+pancreatic sections [1]; Hoch and Schulz *et al.*
 used a 46-marker melanoma panel emphasising chemokines and immune
-checkpoints [ref: HochSchulz 2022]; Jackson and Fischer *et al.*
+checkpoints [2]; Jackson and Fischer *et al.*
 imaged breast cancer with 45 markers including lineage markers not
-present in the other two [ref: Jackson 2020]. Only a small core of
+present in the other two [3]. Only a small core of
 markers — DNA intercalators, histone H3, SMA, and a handful of
 canonical immune markers — appears in all three.
 
@@ -104,7 +106,7 @@ from available ones — termed **panel extension** — would unlock both
 use-cases.
 
 Recent work has established that panel extension is feasible at the
-level of a single cohort. [Murphy *et al.* 2025] trained a standard
+level of a single cohort. Sun, Li and Murphy [4] trained a standard
 U-Net to predict a fixed held-out set of protein channels from the
 remaining channels of the same IMC tile, reaching mean Pearson
 correlations of 0.37–0.49 across three public IMC cohorts. This
@@ -130,7 +132,7 @@ that every IMC tile already contains the information needed to
 generate a *virtual* H&E image — the DNA channels light up where
 nuclei live, and the mean of biomarker channels approximates
 cytoplasmic abundance — and that feeding this pseudo-H&E image to
-a large pathology foundation model [ref: Phikon-v2] yields a
+a large pathology foundation model [5] yields a
 **tissue-invariant representation** that can act as conditioning
 for a masked reconstruction network. Because the pseudo-H&E
 synthesis depends only on signal present in any IMC acquisition,
@@ -175,10 +177,9 @@ checkpoints at [url TBD].
 ### Datasets and canonical panel
 
 We use three public IMC cohorts: **Damond pancreas** (38 markers,
-T1D progression) [ref: Damond 2019]; **Hoch-Schulz melanoma**
-(46 markers, anti-PD-1/PD-L1 immunotherapy) [ref: HochSchulz 2022];
-and **Jackson breast cancer** (45 markers, Basel cohort) [ref:
-Jackson 2020]. All three are distributed as
+T1D progression) [1]; **Hoch-Schulz melanoma**
+(46 markers, anti-PD-1/PD-L1 immunotherapy) [2];
+and **Jackson breast cancer** (45 markers, Basel cohort) [3]. All three are distributed as
 `CytoImageList` R objects via the `imcdatasets` Bioconductor
 package. Raw image data was converted from `.rds` to flat per-tile
 `.npy` caches on first load and re-used across runs.
@@ -257,11 +258,12 @@ H&E histology. The RGB image is bilinearly resized to 224 × 224
 
 ### Phikon-v2 conditioning branch (frozen)
 
-Phikon-v2 is a ViT-B/16 self-supervised foundation model trained
-on 400 million histopathology tiles from Owkin [ref: Phikon-v2].
-We load the public `owkin/phikon-v2` weights and keep them
-frozen throughout training. The forward pass produces a 1024-
-dimensional feature vector on a 14 × 14 token grid. No paired
+Phikon-v2 is a ViT-L/16 self-supervised foundation model
+(DINOv2 pretraining, 460 M histopathology tiles from > 55 k
+public slides) from Owkin [Filiot 2024]. We load the public
+`owkin/phikon-v2` weights and keep them frozen throughout
+training. On a 224 × 224 input the forward pass produces a
+1024-dimensional feature vector on a 14 × 14 token grid. No paired
 real H&E is ever required; the synthetic H&E above is the sole
 input to Phikon-v2.
 
@@ -549,15 +551,14 @@ additional cohorts and is a priority for v3.
 ### Comparison to related work
 
 Most prior panel-extension work treats the problem as
-single-cohort supervised regression [ref: Murphy 2025; other
-IMC imputation work]. Cross-cohort transfer has been attempted
-for single-cell data [ref: scVI, scArches], but those methods
+single-cohort supervised regression [4]. Cross-cohort transfer
+has been attempted for single-cell data [10], but those methods
 operate on cell-level expression and do not handle spatial
 structure. Pathology foundation models have been used as
 feature backbones for H&E-native tasks (classification,
-survival, tissue segmentation) [ref: Phikon-v2 applications,
-UNI, CONCH]; to our knowledge we are the first to use them
-as a **conditioning branch for an IMC reconstruction model**.
+survival, tissue segmentation) [5, 8, 9]; to our knowledge
+we are the first to use them as a **conditioning branch for
+an IMC reconstruction model**.
 
 ### Practical implications
 
@@ -592,11 +593,19 @@ code and checkpoints for community use.
 
 ## Acknowledgements
 
-[TBD]
+The author thanks the Bodenmiller laboratory for making all three
+IMC datasets publicly available, and Owkin for releasing the
+Phikon-v2 weights under an open licence. All model training was
+performed on NVIDIA RTX 3090 GPUs.
 
 ## Funding
 
-[TBD]
+This work was financially supported by the National Natural
+Science Foundation of China (82404067); the Suzhou Municipal
+Applied Basic Research and Science & Technology Innovation
+Program (SYW2024105); and the Qilu Medical Research Fund of
+Suzhou Medical College, Soochow University (24QL200115), all to
+H.Y.
 
 ## Data Availability
 
@@ -609,11 +618,13 @@ generation scripts are at [github url TBD].
 
 ## Author contributions
 
-[TBD]
+H.Y. conceived the study, implemented the method, performed all
+experiments and analyses, prepared the figures, and wrote the
+manuscript.
 
 ## Conflict of interest
 
-The authors declare no conflicts of interest.
+The author declares no conflicts of interest.
 
 ---
 
@@ -628,7 +639,7 @@ six during inference — producing a masked 10-channel input
 that preserves the morphology channels (DNA1/DNA2/H3/SMA).
 **Right (pseudo-H&E branch):** the full tile is rendered as a
 synthetic H&E image (hematoxylin from DNA channels, eosin from
-biomarker channels) and encoded by a frozen Phikon-v2 ViT-B,
+biomarker channels) and encoded by a frozen Phikon-v2 ViT-L,
 producing a 1024-d × 14 × 14 feature map. The two branches
 converge at the bottleneck of a MaskedUNetV2, where the Phikon
 features are concatenated with the encoder output after a 1×1
@@ -689,31 +700,75 @@ cohorts. All 18 cohort × marker cells have v2 ≥ Murphy.
 
 ---
 
-## References (placeholders — to be filled in)
+## References
 
-1. Damond N, Engler S, Zanotelli V R T, *et al.* **A map of
-   human type 1 diabetes progression by imaging mass
-   cytometry.** *Cell Metabolism* 2019.
-2. Hoch T, Schulz D, Eling N, *et al.* **Multiplexed imaging
-   mass cytometry of the chemokine milieus in melanoma
-   characterizes features of the response to immunotherapy.**
-   *Science Immunology* 2022.
-3. Jackson H W, Fischer J R, Zanotelli V R T, *et al.* **The
-   single-cell pathology landscape of breast cancer.**
-   *Nature* 2020.
-4. Murphy *et al.* **[panel-extension U-Net baseline].**
-   [year / venue — to confirm].
-5. Filiot A, Ghermi R, Olivier A, *et al.* **Phikon-v2: a
-   self-supervised pathology foundation model.** [year / venue].
-6. Ronneberger O, Fischer P, Brox T. **U-Net: Convolutional
-   networks for biomedical image segmentation.** *MICCAI* 2015.
-7. Dosovitskiy A, Beyer L, Kolesnikov A, *et al.* **An image
-   is worth 16×16 words: transformers for image recognition
-   at scale.** *ICLR* 2021.
-8. Chen R J, *et al.* **CONCH: A vision-language foundation
-   model for computational pathology.** *Nature Medicine* 2024.
-9. Chen R J, *et al.* **UNI: A general-purpose self-supervised
-   model for pathology.** *Nature Medicine* 2024.
-10. Lopez R, Regier J, Cole M B, *et al.* **Deep generative
-    modeling for single-cell transcriptomics.** *Nature
-    Methods* 2018 (scVI).
+1. Damond N, Engler S, Zanotelli V R T, Schapiro D, Wasserfall C H,
+   Kusmartseva I, Nick H S, Thorel F, Herrera P L, Atkinson M A,
+   Bodenmiller B.
+   **A Map of Human Type 1 Diabetes Progression by Imaging Mass
+   Cytometry.**
+   *Cell Metabolism* 2019; **29**(3): 755–768.e5.
+   doi:10.1016/j.cmet.2018.11.014
+
+2. Hoch T, Schulz D, Eling N, Martínez Gómez J, Levesque M P,
+   Bodenmiller B.
+   **Multiplexed imaging mass cytometry of the chemokine milieus
+   in melanoma characterizes features of the response to
+   immunotherapy.**
+   *Science Immunology* 2022; **7**(70): eabk1692.
+   doi:10.1126/sciimmunol.abk1692
+
+3. Jackson H W, Fischer J R, Zanotelli V R T, Ali H R, Mechera R,
+   Soysal S D, Moch H, Muenst S, Varga Z, Weber W P, Bodenmiller B.
+   **The single-cell pathology landscape of breast cancer.**
+   *Nature* 2020; **578**(7796): 615–620.
+   doi:10.1038/s41586-019-1876-x
+
+4. Sun H, Li J, Murphy R F.
+   **Expanding the coverage of spatial proteomics: a machine
+   learning approach.**
+   *Bioinformatics* 2024; **40**(2): btae062.
+   doi:10.1093/bioinformatics/btae062
+
+5. Filiot A, Jacob P, Mac Kain A, Saillard C.
+   **Phikon-v2, a large and public feature extractor for biomarker
+   prediction.**
+   *arXiv preprint* 2024; arXiv:2409.09173.
+   Model weights: [owkin/phikon-v2](https://huggingface.co/owkin/phikon-v2)
+
+6. Ronneberger O, Fischer P, Brox T.
+   **U-Net: Convolutional Networks for Biomedical Image
+   Segmentation.**
+   In: *Medical Image Computing and Computer-Assisted
+   Intervention — MICCAI 2015*. LNCS 9351; pp. 234–241.
+   doi:10.1007/978-3-319-24574-4\_28
+
+7. Dosovitskiy A, Beyer L, Kolesnikov A, Weissenborn D, Zhai X,
+   Unterthiner T, Dehghani M, Minderer M, Heigold G, Gelly S,
+   Uszkoreit J, Houlsby N.
+   **An Image is Worth 16×16 Words: Transformers for Image
+   Recognition at Scale.**
+   *International Conference on Learning Representations (ICLR)*
+   2021. arXiv:2010.11929
+
+8. Lu M Y, Chen B, Williamson D F K, Chen R J, Liang I, Ding T,
+   Jaume G, Odintsov I, Le L P, Gerber G, Parwani A V, Mahmood F.
+   **A visual-language foundation model for computational
+   pathology.**
+   *Nature Medicine* 2024; **30**: 863–874.
+   doi:10.1038/s41591-024-02856-4
+   (CONCH)
+
+9. Chen R J, Ding T, Lu M Y, Williamson D F K, Jaume G, Chen B,
+   Zhang A, Shao D, Song A H, Shaban M, *et al.*
+   **Towards a general-purpose foundation model for
+   computational pathology.**
+   *Nature Medicine* 2024; **30**: 850–862.
+   doi:10.1038/s41591-024-02857-3
+   (UNI)
+
+10. Lopez R, Regier J, Cole M B, Jordan M I, Yosef N.
+    **Deep generative modeling for single-cell transcriptomics.**
+    *Nature Methods* 2018; **15**(12): 1053–1058.
+    doi:10.1038/s41592-018-0229-2
+    (scVI)
