@@ -116,7 +116,7 @@ def _panel_sweep(path: Path):
 
 
 def fig_he_ablation() -> None:
-    fig, axes = plt.subplots(1, 3, figsize=(W_DOUBLE, 2.45), sharey=False)
+    fig, axes = plt.subplots(1, 3, figsize=(W_DOUBLE, 2.7), sharey=False)
     for ax, (title, v1_dir, v2_dir, base_pcc), label in zip(axes, HE_CONFIG, "abc"):
         s1, m1, e1 = _panel_sweep(v1_dir)
         s2, m2, e2 = _panel_sweep(v2_dir)
@@ -125,7 +125,7 @@ def fig_he_ablation() -> None:
         ax.errorbar(s2, m2, yerr=e2, fmt="-s", color=C_V2, capsize=3,
                     lw=1.3, ms=4.5, label="v2 (+ Phikon)")
         ax.axhline(base_pcc, color=C_GREY, ls="--", lw=0.8, alpha=0.7,
-                   label=f"Murphy @ size=10 ({base_pcc:.2f})")
+                   label="Murphy (sz=10)")
         ax.set_xlabel("Observed panel size")
         if label == "a":
             ax.set_ylabel("Mean PCC (bio targets)")
@@ -133,9 +133,18 @@ def fig_he_ablation() -> None:
         ax.set_xticks(sorted(set(s1) | set(s2)))
         ax.grid(alpha=0.25, lw=0.4)
         ax.set_axisbelow(True)
-        ax.legend(loc="lower right", handlelength=1.6, borderpad=0.3)
         panel_label(ax, label)
-    fig.tight_layout(w_pad=1.2)
+    # Shared legend above all panels — avoids per-panel crowding.
+    handles, labels = axes[0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc="upper center", ncol=3,
+               bbox_to_anchor=(0.5, 1.02), handlelength=1.8,
+               columnspacing=2.0, borderpad=0.3)
+    # Per-panel baseline value as small annotation next to the dashed line
+    for ax, (_, _, _, base_pcc) in zip(axes, HE_CONFIG):
+        ax.annotate(f"{base_pcc:.2f}", xy=(ax.get_xlim()[1], base_pcc),
+                    xytext=(-4, 3), textcoords="offset points",
+                    fontsize=6.5, color=C_GREY, ha="right", va="bottom")
+    fig.tight_layout(w_pad=1.2, rect=(0, 0, 1, 0.93))
     save(fig, "figure_he_ablation")
 
 
@@ -168,32 +177,36 @@ def _murphy_mean_excl_dna(path: Path) -> float:
 
 
 def fig_panel_flexibility() -> None:
-    fig, axes = plt.subplots(1, 3, figsize=(W_DOUBLE, 2.45), sharey=False)
+    common_ticks = [3, 7, 10, 15, 20]
+    fig, axes = plt.subplots(1, 3, figsize=(W_DOUBLE, 2.7), sharey=False)
     for ax, (title, key, murphy_rows), label in zip(axes, FLEX_CONFIG, "abc"):
         sizes, means, stds = _panel_sweep(R / f"v2_sweep_{key}")
-        # v2 line + shaded band
         ax.plot(sizes, means, "-o", color=C_V2, lw=1.4, ms=4.5,
                 label="SpaProtFM v2 (one checkpoint)", zorder=3)
         ax.fill_between(sizes,
                         [m - s for m, s in zip(means, stds)],
                         [m + s for m, s in zip(means, stds)],
                         color=C_V2, alpha=0.18, lw=0)
-        # Per-size Murphy points
         mu_vals = [_murphy_mean_excl_dna(R / d) for d, _ in murphy_rows]
         mu_x = [s for _, s in murphy_rows]
         ax.scatter(mu_x, mu_vals, marker="D", s=42, color=C_MURPHY,
                    edgecolor="k", lw=0.5, zorder=4,
-                   label=f"Murphy (retrained × {len(mu_x)})")
+                   label="Murphy (retrained per size)")
         ax.set_xlabel("Observed panel size")
         if label == "a":
             ax.set_ylabel("Mean PCC (bio targets, excl. DNA)")
         ax.set_title(title)
-        ax.set_xticks(sorted(set(sizes) | set(mu_x)))
+        ax.set_xlim(2.0, 21.0)
+        ax.set_xticks(common_ticks)
         ax.grid(alpha=0.25, lw=0.4)
         ax.set_axisbelow(True)
-        ax.legend(loc="lower right", handlelength=1.6, borderpad=0.3)
         panel_label(ax, label)
-    fig.tight_layout(w_pad=1.2)
+    # Shared legend above all panels, matches HE ablation layout.
+    handles, labels = axes[0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc="upper center", ncol=2,
+               bbox_to_anchor=(0.5, 1.02), handlelength=1.8,
+               columnspacing=2.5, borderpad=0.3)
+    fig.tight_layout(w_pad=1.2, rect=(0, 0, 1, 0.93))
     save(fig, "figure_panel_flexibility")
 
 
@@ -408,10 +421,10 @@ def fig_xds_per_marker() -> None:
         vm = [_agg(v2_pm[ds][k])[0] for k in XDS_MARKERS]
         vs = [_agg(v2_pm[ds][k])[1] for k in XDS_MARKERS]
         ax.bar(x - w/2, mm, w, yerr=ms, color=C_MURPHY, edgecolor="k",
-               lw=0.4, capsize=2, error_kw={"lw": 0.7},
+               lw=0.4, capsize=3, error_kw={"lw": 1.1},
                label="Murphy (best source)" if label == "c" else None)
         ax.bar(x + w/2, vm, w, yerr=vs, color=C_V2, edgecolor="k",
-               lw=0.4, capsize=2, error_kw={"lw": 0.7},
+               lw=0.4, capsize=3, error_kw={"lw": 1.1},
                label="SpaProtFM v2" if label == "c" else None)
         ax.axhline(0, color="k", lw=0.4)
         ax.set_xticks(x)
